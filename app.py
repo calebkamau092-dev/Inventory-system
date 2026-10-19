@@ -7,11 +7,21 @@ Endpoints:
     POST   /inventory          -> add a new item
     PATCH  /inventory/<id>     -> update fields of an item
     DELETE /inventory/<id>     -> remove an item
+
+Helper routes (OpenFoodFacts):
+    GET    /external/product/<barcode> -> look up a product by barcode
+    GET    /external/search?name=      -> search products by name
+    POST   /inventory/import           -> fetch a product by barcode and add it
 """
 
 from flask import Flask, jsonify, request
 
 from data import find_item, inventory, next_id
+from external_api import (
+    ExternalAPIError,
+    fetch_product_by_barcode,
+    search_products_by_name,
+)
 
 # Fields a client is allowed to set on an item.
 ALLOWED_FIELDS = {
@@ -133,6 +143,72 @@ def create_app():
             return jsonify({"error": f"Item {item_id} not found"}), 404
         inventory.remove(item)
         return jsonify({"message": f"Item {item_id} deleted", "item": item}), 200
+
+    # ---------- External API helper routes ----------
+
+    @app.get("/external/product/<barcode>")
+    def external_product(barcode):
+        """Look up a product on OpenFoodFacts by barcode (does not save it)."""
+        try:
+            product = fetch_product_by_barcode(barcode)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except ExternalAPIError as exc:
+            return jsonify({"error": str(exc)}), 502
+        if product is None:
+            return jsonify({"error": f"No product found for barcode {barcode}"}), 404
+        return jsonify(product), 200
+
+    @app.get("/external/search")
+    def external_search():
+        """Search OpenFoodFacts by product name (does not save results)."""
+        name = request.args.get("name", "")
+        try:
+            products = search_products_by_name(name)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except ExternalAPIError as exc:
+            return jsonify({"error": str(exc)}), 502
+        return jsonify(products), 200
+
+    @app.post("/inventory/import")
+    def import_item():
+        """
+        Fetch a product from OpenFoodFacts by barcode and add it to inventory.
+
+        Body: {"barcode": "...", "price": 2.5, "stock": 10}
+        """
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or not payload.get("barcode"):
+            return jsonify({"error": "barcode is required"}), 400
+
+        barcode = str(payload["barcode"]).strip()
+        store_fields = {k: payload[k] for k in ("price", "stock") if k in payload}
+        error = validate_fields(store_fields)
+        if error:
+            return jsonify({"error": error}), 400
+
+        if any(item.get("barcode") == barcode for item in inventory):
+            return jsonify({"error": f"Barcode {barcode} is already in inventory"}), 409
+
+        try:
+            product = fetch_product_by_barcode(barcode)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except ExternalAPIError as exc:
+            return jsonify({"error": str(exc)}), 502
+        if product is None:
+            return jsonify({"error": f"No product found for barcode {barcode}"}), 404
+
+        item = {
+            "id": next_id(),
+            **product,
+            "product_name": product["product_name"] or f"Unnamed product {barcode}",
+            "price": store_fields.get("price", 0.0),
+            "stock": store_fields.get("stock", 0),
+        }
+        inventory.append(item)
+        return jsonify(item), 201
 
     return app
 
