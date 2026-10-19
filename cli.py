@@ -5,6 +5,7 @@ The Flask server (app.py) must be running. Usage:
 
     python cli.py                  # interactive menu
     python cli.py list             # one-off commands
+    python cli.py low-stock --threshold 30
     python cli.py view 1
     python cli.py add "Brown Bread" --brand Festive --price 0.99 --stock 10
     python cli.py update 1 --price 4.25 --stock 30
@@ -86,6 +87,15 @@ def list_items(name=None):
     if not items:
         return "No items found."
     return "\n".join(f"[{i['id']}] {i['product_name']} | ${float(i['price']):.2f} | stock: {i['stock']}" for i in items)
+
+
+def low_stock(threshold=10):
+    items = api_request("GET", "/inventory/low-stock", params={"threshold": threshold})
+    if not items:
+        return f"No items with stock at or below {threshold}."
+    lines = [f"Items with stock at or below {threshold}:"]
+    lines += [f"  [{i['id']}] {i['product_name']} | stock: {i['stock']}" for i in items]
+    return "\n".join(lines)
 
 
 def view_item(item_id):
@@ -176,6 +186,7 @@ MENU = """
 5. Delete item
 6. Find product on OpenFoodFacts
 7. Import product from OpenFoodFacts
+8. Low stock report
 0. Exit
 """
 
@@ -219,6 +230,8 @@ def run_menu_choice(choice, ask=input):
         price = parse_price(ask("Price: ") or 0)
         stock = parse_stock(ask("Stock: ") or 0)
         return import_item(barcode, price, stock)
+    if choice == "8":
+        return low_stock(parse_stock(ask("Show items with stock at or below (default 10): ") or 10))
     raise CLIError("Invalid choice. Pick a number from the menu.")
 
 
@@ -243,6 +256,9 @@ def build_parser():
 
     p = sub.add_parser("list", help="List all items")
     p.add_argument("--name", help="Filter by product name")
+
+    p = sub.add_parser("low-stock", help="List items that need restocking")
+    p.add_argument("--threshold", default="10")
 
     p = sub.add_parser("view", help="View one item")
     p.add_argument("id")
@@ -280,6 +296,8 @@ def run_command(args):
     """Dispatch parsed argparse arguments to a command and return its output."""
     if args.command == "list":
         return list_items(args.name)
+    if args.command == "low-stock":
+        return low_stock(parse_stock(args.threshold))
     if args.command == "view":
         return view_item(parse_id(args.id))
     if args.command == "add":
