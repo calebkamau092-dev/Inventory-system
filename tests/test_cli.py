@@ -229,3 +229,27 @@ def test_main_reports_invalid_input(capsys):
 def test_main_reports_api_errors(mock_api, capsys):
     assert cli.main(["view", "99"]) == 1
     assert "Item 99 not found" in capsys.readouterr().err
+
+
+# ---------- Low stock report ----------
+
+@patch("cli.api_request", return_value=[SAMPLE_ITEM])
+def test_low_stock(mock_api):
+    output = cli.low_stock(30)
+    assert "Organic Almond Milk | stock: 25" in output
+    mock_api.assert_called_once_with("GET", "/inventory/low-stock", params={"threshold": 30})
+
+
+@patch("cli.api_request", return_value=[])
+def test_low_stock_empty(mock_api):
+    assert "No items" in cli.low_stock(5)
+
+
+@patch("cli.low_stock", return_value="report")
+def test_menu_low_stock_uses_default(mock_low):
+    assert cli.run_menu_choice("8", fake_input("")) == "report"
+    mock_low.assert_called_once_with(10)
+
+
+def test_main_low_stock_rejects_bad_threshold(capsys):
+    assert cli.main(["low-stock", "--threshold", "lots"]) == 1

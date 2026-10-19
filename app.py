@@ -8,6 +8,9 @@ Endpoints:
     PATCH  /inventory/<id>     -> update fields of an item
     DELETE /inventory/<id>     -> remove an item
 
+Helper routes:
+    GET    /inventory/low-stock?threshold= -> items that need restocking
+
 Helper routes (OpenFoodFacts):
     GET    /external/product/<barcode> -> look up a product by barcode
     GET    /external/search?name=      -> search products by name
@@ -86,6 +89,15 @@ def create_app():
             results = [i for i in inventory if name in i["product_name"].lower()]
             return jsonify(results), 200
         return jsonify(inventory), 200
+
+    @app.get("/inventory/low-stock")
+    def low_stock():
+        """Return items whose stock is at or below ?threshold= (default 10)."""
+        threshold = request.args.get("threshold", "10")
+        if not threshold.isdigit():
+            return jsonify({"error": "threshold must be a non-negative integer"}), 400
+        results = [i for i in inventory if i["stock"] <= int(threshold)]
+        return jsonify(results), 200
 
     @app.get("/inventory/<int:item_id>")
     def get_item(item_id):

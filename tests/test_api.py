@@ -119,3 +119,27 @@ def test_new_id_does_not_reuse_existing(client):
     client.delete("/inventory/1")
     response = client.post("/inventory", json={"product_name": "Eggs"})
     assert response.get_json()["id"] == 4
+
+
+
+# ---------- Low stock report ----------
+
+def test_low_stock_default_threshold(client):
+    client.patch("/inventory/1", json={"stock": 5})
+    response = client.get("/inventory/low-stock")
+    data = response.get_json()
+    assert response.status_code == 200
+    assert [i["id"] for i in data] == [1]
+
+
+def test_low_stock_custom_threshold(client):
+    response = client.get("/inventory/low-stock?threshold=40")
+    assert [i["id"] for i in response.get_json()] == [1, 2]
+
+
+def test_low_stock_none_below_threshold(client):
+    assert client.get("/inventory/low-stock?threshold=0").get_json() == []
+
+
+def test_low_stock_invalid_threshold(client):
+    assert client.get("/inventory/low-stock?threshold=abc").status_code == 400
