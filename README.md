@@ -196,7 +196,3 @@ Error: Item 99 not found
 - OpenFoodFacts is a free, community-maintained database. Some products have missing fields, and the name-search endpoint is sometimes overloaded (the API then returns a 502 error).
 
 See [`docs/design.md`](docs/design.md) for the problem definition, route planning and architecture.
-
-## Acknowledgements
-
-Built with help from Claude (an AI assistant), which I used to generate code and explanations. I typed in, ran, tested and debugged the code myself.
